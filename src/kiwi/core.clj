@@ -2,59 +2,71 @@
   (:gen-class)
   (:require [clojure.tools.logging :as log]
             [clojure.data.json :as json]
-            [integrant.core :as ig]
+            [nrepl.server :as nrepl]
+            [mount.core :refer [defstate] :as mount]
             [compojure.core :refer :all]
             [compojure.route :as route]
             [org.httpkit.server :as http]))
 
 
-(def config
-  {:db/init {}
-   :http/server {:port 7000 :handler (ig/ref :http/handler)}
-   :http/handler {}})
+
+;; log uncaught exceptions in threads
+(Thread/setDefaultUncaughtExceptionHandler
+  (reify Thread$UncaughtExceptionHandler
+    (uncaughtException [_ thread ex]
+      (log/error {:what :uncaught-exception
+                  :exception ex
+                  :where (str "Uncaught exception on" (.getName thread))}))))
+
+(def handler
+  (routes
+   (GET "/" [] "안녕 세상아 ")
+   (route/not-found "<h1>404</h1>")))
 
 
-(defmethod ig/init-key :db/init [_ _]
-  (do
-    (log/info "H2 db initalize..")))
+(mount/defstate ^{:on-reload :noop} http-server
+  :start
+  (try
+    (log/info "HTTP server stopped")
+    (http/run-server handler {:port 8000})
+    (catch Throwable t
+      (log/error t)
+      (throw t)
+    ))
 
-
-(defmethod ig/init-key :http/server [_ {:keys [handler port]}]
-  (let [server (http/run-server handler {:port port})]
-    (log/info "Starting HTTP server on port" port)
-    server))
-
-
-(defmethod ig/halt-key! :http/server [_ server]
-  (do
-    (server :timeout 200)
+  :stop
+  (when-not (nil? http-server)
+    (http-server :timeout 100)
     (log/info "HTTP server stopped")))
 
 
-(defmethod ig/init-key :http/handler [_  _]
-  (let [app (routes
-             (GET "/" [] "안녕 세상아 ")
-             (route/not-found "<h1>404</h1>"))]
-    app))
+(mount/defstate ^{:on-reload :noop}
+  nrepl-server
+  :start
+  (try
+    (log/info "nREPL server start")
+    (nrepl/start-server :port 7000)
+    (catch Throwable t
+      (log/error t)
+      (throw t)))
 
+  :stop
+  (when nrepl-server
+    (nrepl/stop-server nrepl-server)
+    (log/info "nREPL server stopped")))
 
-(defonce component (atom nil))
-
-
-(defn start! []
-  (reset! component (ig/init config)))
 
 
 (defn stop! []
-  (when-not (nil? @component)
-    (ig/halt! @component)
-    (reset! component nil)))
+  (doseq [component (:stopped (mount/start))]
+    (log/info component "stopped"))
+  (shutdown-agents))
 
 
-(defn restart! []
-  (do
-    (stop!)
-    (start!)))
+(defn start! []
+  (doseq [component (:started (mount/start))]
+    (log/info component "started"))
+  (.addShutdownHook (Runtime/getRuntime) (Thread. stop!)))
 
 
 (defn -main []
