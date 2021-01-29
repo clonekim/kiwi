@@ -10,9 +10,14 @@
                  [org.clojure/java.jdbc "0.7.11"]
                  [ring/ring-core "1.8.2"]
                  [com.h2database/h2 "1.4.200"]
+                 [nrepl "0.8.3"]
                  [integrant "0.8.0"]
                  [compojure "1.6.2"]
-                 [http-kit/http-kit "2.5.1"]]
+                 [org.commonmark/commonmark "0.17.0"]
+                 ;;                 [com.github.jknack/handlebars "4.2.0"]
+                 [hbs/hbs "1.0.3"]
+                 [http-kit/http-kit "2.5.1"]
+                 [ch.qos.logback/logback-classic "1.2.3"]]
   :repl-options {:init-ns kiwi.core}
   :main kiwi.core
   :profiles
